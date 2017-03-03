@@ -20,21 +20,23 @@ const nextPromiseMap = new Map();
  * 
  * @param {any} result 
  */
-const OnFulfillWillExecuteInNextTick = function(result) {
+const OnCallbackExecuteInNextTick = function(result, status = true) {
     try{
-        const onFulfilled = onFulfillMap.get(this);
-        if (typeof onFulfilled === 'function') {
-            result = onFulfilled.call(undefined, result);
-            // 结果值只传一次出去。
-        }
-        const nextPromise = nextPromiseMap.get(this);
-        // 递归的转移下个promise状态为fulfill，直到某个nextPromise没有注册过回调函数，
-        // 也即没有了nextPromise为止。
-        if (nextPromise instanceof Promise) {
-            resolve.call(nextPromise, result);
+        const onListener = (status ? onFulfillMap : onRejectMap).get(this);
+        if (typeof onListener === 'function') {
+            result = onListener.call(undefined, result);
+            if (!status) return; // 触发reject，回调一次即可。
         }
     } catch (e) {
-
+        result = e;
+        status = false;
+    }
+    // 如果是resolve,会递归的转移下个promise状态，直到某个nextPromise没有注册过回调函数，
+    // 也即没有了nextPromise为止。
+    // 如果是reject, 会一直去找注册了rejected状态的回调函数来调用，保证只调用一次。
+    const nextPromise = nextPromiseMap.get(this);
+    if (nextPromise instanceof Promise) {
+        (status ? resolve : reject).call(nextPromise, result);
     }
 }
 
@@ -64,7 +66,7 @@ const resolve = function(result) {
             );
         } else {
             // next event loop macro-task
-            setTimeout(OnFulfillWillExecuteInNextTick.bind(this), 0, result);
+            setTimeout(OnCallbackExecuteInNextTick.bind(this), 0, result);
         }
     }
 }
@@ -83,18 +85,8 @@ const reject = function(error) {
     this[PromiseValue] = error;
     
     // next event loop macro-task
-    setTimeout(()=>{
-        // try{
-            const onRejected = onRejectMap.get(this);
-            if (typeof onRejected === 'function') {
-                onRejected.call(undefined, error);
-            }
-        // } catch(e) {
-        //     console.log('reject error', e);
-        // }
-    }, 0);
+    setTimeout(OnCallbackExecuteInNextTick.bind(this), 0, error, false);
 }
-
 
 /**
  * 按照ES6规范实现。

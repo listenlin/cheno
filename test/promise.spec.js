@@ -67,7 +67,31 @@ describe('测试Promise.then方法', ()=>{
             expect(result).to.be.equal('p2');
             done();
         });
+    });
 
+    it('fulfilled状态回调函数抛异常，传递给下个promise的rejected回调函数', done=>{
+        const p1 = new Promise(resolve=>{
+            setTimeout(()=>resolve('p1'), 100);
+        });
+        p1.then(r=>{
+            throw new Error(r);
+        }).then(null, err=>{
+            expect(err.message).to.be.equal('p1');
+            done();
+        });
+    });
+
+    it('fulfilled状态回调函数抛异常，传递给直到后续某个promise注册的rejected回调函数为止', done=>{
+        const p1 = new Promise(resolve=>{
+            setTimeout(()=>resolve('p1'), 100);
+        });
+        p1.then(r=>{
+            throw new Error(r);
+        }).then(null, null)
+        .catch(err=>{
+            expect(err.message).to.be.equal('p1');
+            done();
+        });
     });
 });
 
@@ -87,11 +111,13 @@ describe('异常处理', ()=>{
         const p = new Promise(()=>{
             throw new Error();
         });
-        let timer;
+        let timer;p.p=9;
         p.catch(err=>{
-            expect(err).to.a('error');
-            timer = setTimeout(done, 500);
-        }).catch(()=>{
+            timer = setTimeout(()=>{
+                expect(err).to.a('error');
+                done();
+            }, 100);
+        }).catch((err)=>{
             clearTimeout(timer);
             expect(1, '只是触发失败，错误信息无用。').to.equal(0);
             done();
