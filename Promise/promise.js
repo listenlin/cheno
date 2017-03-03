@@ -1,12 +1,65 @@
+/**
+ * 按照ES6的Promise对象，实现一模一样的功能。
+ * @copyright Copyright(c) 2017 listenlin.
+ * @author listenlin <listenlin521@foxmail.com>
+ */
 import 'babel-polyfill';
 
-let PromiseValue = Symbol('PromiseValue');
-let PromiseStatus = Symbol('PromiseStatus');
+const PromiseValue = Symbol('PromiseValue');
+const PromiseStatus = Symbol('PromiseStatus');
+
+/**
+ * 将状态转移至fulfilled
+ * 
+ * @param {any} result 
+ * @returns 
+ */
+const resolve = function(...result){
+    if (this[PromiseStatus] !== 'pending') return;
+    
+    if (result[0] instanceof Promise) {
+        // 使当前Promise对象状态，依赖上层promise。
+        result[0].then(
+            resolve.bind(this),
+            reject.bind(this)
+        ).catch(
+            this.catch.bind(this)
+        );
+    } else {
+        // 调用resolve之后，状态要立马确定，防止接着调用reject更改其状态。
+        this[PromiseStatus] = 'fulfilled';
+        this[PromiseValue] = result[0];
+        if (typeof this._onFulfilled === 'function') {
+            // next event loop macro-task
+            setTimeout(()=>{
+                this._onFulfilled.apply(undefined, result);
+            }, 0);
+        }
+    }
+}
+
+/**
+ * 将状态转移至rejected。
+ * 
+ * @param {Error} err 
+ * @returns 
+ */
+const reject = function(...err){
+    if (this[PromiseStatus] !== 'pending') return;
+
+    this[PromiseStatus] = 'rejected';
+
+    if (typeof this._onRejected === 'function') {
+        // next event loop macro-task
+        setTimeout(()=>{
+            const result = this._onRejected.apply(undefined, err);
+        }, 0);
+    }
+}
+
 /**
  * 按照ES6规范实现。
  * 
- * @copyright Copyright(c) 2017 listenlin.
- * @author listenlin <listenlin521@foxmail.com>
  * @class Promise
  */
 export default class Promise
@@ -19,73 +72,31 @@ export default class Promise
      */
     constructor(fn)
     {
-        this[PromiseStatus] = 'Pending';//Resolved, Rejected
+        this[PromiseStatus] = 'pending';//fulfilled, rejected
         this[PromiseValue] = undefined;
 
-        this._resolved = undefined;
-        this._rejected = undefined;
-        this._catched = [];
+        this._onFulfilled = undefined;
+        this._onRejected = undefined;
+        this._catchListener = undefined;
         
         if (typeof fn === 'function') {
-            fn(this.resolve.bind(this), this.reject.bind(this));
-        }
-    }
-
-    /**
-     * 将状态转移至Resolved
-     * 
-     * @param {any} result 
-     * @returns 
-     * 
-     * @memberOf Promise
-     */
-    resolve(result)
-    {
-        if (this[PromiseStatus] !== 'Pending') return;
-        
-        this[PromiseStatus] = 'Resolved';
-        if (result instanceof Promise) {
-            result.then(this.resolve, this.reject).catch(this.catch);
-        } else {
-            if (typeof this._resolved === 'function') {
-                this[PromiseValue] = this._resolved(result);
-            }
-        }
-    }
-
-    /**
-     * 将状态转移至Rejected。
-     * 
-     * @param {Error} err 
-     * @returns 
-     * 
-     * @memberOf Promise
-     */
-    reject(err)
-    {
-        if (this[PromiseStatus] !== 'Pending') return;
-
-        this[PromiseStatus] = 'Rejected';
-        
-        if (typeof this._rejected === 'function') {
-            let result = this._rejected(err);
-
+            fn(resolve.bind(this), reject.bind(this));
         }
     }
 
     /**
      * 注册回调方法
      * 
-     * @param {Function} success 
-     * @param {Function} failed 
+     * @param {Function} onFulfilled 
+     * @param {Function} onRejected 
      * @returns {Promise}
      * 
      * @memberOf Promise
      */
-    then(success, failed)
+    then(onFulfilled, onRejected)
     {
-        this._resolved = success;
-        this._rejected = failed;
+        this._onFulfilled = onFulfilled;
+        this._onRejected = onRejected;
 
         return new Promise;
     }
@@ -99,7 +110,7 @@ export default class Promise
      */
     catch(fn)
     {
-        this._catched.push(fn);
+        this._catchListener = fn;
     }
 
 }
