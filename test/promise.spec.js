@@ -45,14 +45,14 @@ describe('测试Promise.then方法', ()=>{
     });
 
     it('Fulfilled返回值传递给下个then方法',done=>{
-        
+        const value = Math.random();
         const p = new Promise((resolve)=>{
-            setTimeout(()=>resolve('success'), 100);
+            setTimeout(()=>resolve(value), 100);
         });
         p.then(result=>{
             return result;
         }).then(result=>{
-            expect(result).to.be.equal('success');
+            expect(result).to.be.equal(value);
             done();
         });
 

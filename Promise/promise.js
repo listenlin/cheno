@@ -98,10 +98,18 @@ export default class Promise
      */
     then(onFulfilled, onRejected)
     {
-        onFulfillMap.set(this, onFulfilled);
+        let resolve;
+        const promise = new Promise(r=>resolve=r);
+        onFulfillMap.set(this, (...results)=>{
+            if (results[0] instanceof Promise) {
+
+            } else {
+                resolve(onFulfilled(...results));
+            }
+        });
         onRejectMap.set(this, onRejected);
 
-        return new Promise;
+        return promise;
     }
 
     /**
