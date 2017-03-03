@@ -16,21 +16,22 @@ const nextPromiseMap = new Map();
 
 /**
  * resolve执行后，需在下个事件循环才真正执行的fulfill状态监听器函数
+ * 因为需要动态更改其this，所以function申明，而不是箭头函数。
  * 
  * @param {any} result 
  */
-const executeOnFulfill = function(result){
+const OnFulfillWillExecuteInNextTick = function(result) {
     try{
         const onFulfilled = onFulfillMap.get(this);
         if (typeof onFulfilled === 'function') {
             result = onFulfilled.call(undefined, result);
             // 结果值只传一次出去。
         }
-        const nextPromiseFulfill = nextPromiseMap.get(this);
+        const nextPromise = nextPromiseMap.get(this);
         // 递归的转移下个promise状态为fulfill，直到某个nextPromise没有注册过回调函数，
         // 也即没有了nextPromise为止。
-        if (nextPromiseFulfill instanceof Promise) {
-            resolve.call(nextPromiseFulfill, result);
+        if (nextPromise instanceof Promise) {
+            resolve.call(nextPromise, result);
         }
     } catch (e) {
 
@@ -44,7 +45,7 @@ const executeOnFulfill = function(result){
  * @param {any} result - 传回的promise结果值
  * @returns 
  */
-const resolve = function(result){
+const resolve = function(result) {
     if (this[PromiseStatus] !== 'pending') return;
     if (result instanceof Promise) {
         // 使当前Promise对象状态，依赖上层promise。
@@ -54,7 +55,7 @@ const resolve = function(result){
         this[PromiseStatus] = 'fulfilled';
         this[PromiseValue] = result;
         
-        // 当回调promise对象为值时，nextPromise对象等待返回的promise状态变化
+        // 当回调值为promise对象时，nextPromise对象等待返回的promise状态变化
         if (result instanceof Promise) {
             const nextPromise = nextPromiseMap.get(this);
             result.then(
@@ -63,29 +64,30 @@ const resolve = function(result){
             );
         } else {
             // next event loop macro-task
-            setTimeout(executeOnFulfill.bind(this), 0, result);
+            setTimeout(OnFulfillWillExecuteInNextTick.bind(this), 0, result);
         }
     }
 }
 
 /**
  * 将状态转移至rejected。
+ * 因为需要动态更改其this，所以function申明，而不是箭头函数。
  * 
- * @param {Error} err 
+ * @param {Error} error - 错误原因对象
  * @returns 
  */
-const reject = function(...err){
+const reject = function(error) {
     if (this[PromiseStatus] !== 'pending') return;
 
     this[PromiseStatus] = 'rejected';
-    this[PromiseValue] = err[0];
+    this[PromiseValue] = error;
     
     // next event loop macro-task
     setTimeout(()=>{
         // try{
-            const reject = onRejectMap.get(this);
-            if (typeof reject === 'function') {
-                reject.apply(undefined, err);
+            const onRejected = onRejectMap.get(this);
+            if (typeof onRejected === 'function') {
+                onRejected.call(undefined, error);
             }
         // } catch(e) {
         //     console.log('reject error', e);

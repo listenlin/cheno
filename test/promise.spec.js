@@ -44,7 +44,7 @@ describe('测试Promise.then方法', ()=>{
         
     });
 
-    it('fulfilled状态回调函数返回值传递给下个同类状态回调函数', done=>{
+    it('fulfilled状态回调函数返回值，传递给下个同类状态回调函数', done=>{
         const value = Math.random();
         const p = new Promise((resolve)=>{
             setTimeout(()=>resolve(value), 100);
@@ -55,7 +55,7 @@ describe('测试Promise.then方法', ()=>{
         });
     });
 
-    it('fulfilled状态回调函数返回promise对象传递给下个同类状态回调函数', done=>{
+    it('fulfilled状态回调函数返回promise对象，传递给下个同类状态回调函数', done=>{
         const p1 = new Promise(resolve=>{
             setTimeout(()=>resolve('p1'), 100);
         });
@@ -74,14 +74,29 @@ describe('测试Promise.then方法', ()=>{
 describe('异常处理', ()=>{
 
     it('实例化Promise时抛出异常，自动转移状态至rejected', done=>{
-
         const p = new Promise(()=>{
-            throw new Error(123);
+            throw new Error();
         });
         p.catch(err=>{
             expect(err).to.a('error');
             done();
         });
-
     });
+
+    it('转移至rejected状态时，后续promise只调用一次reject回调', done=>{
+        const p = new Promise(()=>{
+            throw new Error();
+        });
+        let timer;
+        p.catch(err=>{
+            expect(err).to.a('error');
+            timer = setTimeout(done, 500);
+        }).catch(()=>{
+            clearTimeout(timer);
+            expect(1, '只是触发失败，错误信息无用。').to.equal(0);
+            done();
+        });
+    });
+
+    
 });
