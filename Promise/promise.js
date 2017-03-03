@@ -8,6 +8,10 @@ import 'babel-polyfill';
 const PromiseValue = Symbol('PromiseValue');
 const PromiseStatus = Symbol('PromiseStatus');
 
+const onFulfillMap = new Map();
+const onRejectMap = new Map();
+const onCatchQueue = new Map();
+
 /**
  * 将状态转移至fulfilled
  * 
@@ -29,10 +33,12 @@ const resolve = function(...result){
         // 调用resolve之后，状态要立马确定，防止接着调用reject更改其状态。
         this[PromiseStatus] = 'fulfilled';
         this[PromiseValue] = result[0];
-        if (typeof this._onFulfilled === 'function') {
+
+        const fulfill = onFulfillMap.get(this);
+        if (typeof fulfill === 'function') {
             // next event loop macro-task
             setTimeout(()=>{
-                this._onFulfilled.apply(undefined, result);
+                fulfill.apply(undefined, result);
             }, 0);
         }
     }
@@ -49,10 +55,11 @@ const reject = function(...err){
 
     this[PromiseStatus] = 'rejected';
 
-    if (typeof this._onRejected === 'function') {
+    const reject = onRejectMap.get(this);
+    if (typeof reject === 'function') {
         // next event loop macro-task
         setTimeout(()=>{
-            const result = this._onRejected.apply(undefined, err);
+            const result = reject.apply(undefined, err);
         }, 0);
     }
 }
@@ -75,10 +82,6 @@ export default class Promise
         this[PromiseStatus] = 'pending';//fulfilled, rejected
         this[PromiseValue] = undefined;
 
-        this._onFulfilled = undefined;
-        this._onRejected = undefined;
-        this._catchListener = undefined;
-        
         if (typeof fn === 'function') {
             fn(resolve.bind(this), reject.bind(this));
         }
@@ -95,8 +98,8 @@ export default class Promise
      */
     then(onFulfilled, onRejected)
     {
-        this._onFulfilled = onFulfilled;
-        this._onRejected = onRejected;
+        onFulfillMap.set(this, onFulfilled);
+        onRejectMap.set(this, onRejected);
 
         return new Promise;
     }
@@ -110,7 +113,7 @@ export default class Promise
      */
     catch(fn)
     {
-        this._catchListener = fn;
+        onCatchQueue.set(this, fn);
     }
 
 }
