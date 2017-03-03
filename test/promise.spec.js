@@ -29,7 +29,7 @@ describe('测试Promise.then方法', ()=>{
 
     });
 
-    it('两个promise的resolve依赖传递关系', done=>{
+    it('使用resolve传递回一个promise', done=>{
 
         const p1 = new Promise((resolve, reject)=>{
             setTimeout(()=>resolve('p1'), 100);
@@ -44,29 +44,25 @@ describe('测试Promise.then方法', ()=>{
         
     });
 
-    it('Fulfilled返回值传递给下个then方法',done=>{
+    it('fulfilled状态回调函数返回值传递给下个同类状态回调函数', done=>{
         const value = Math.random();
         const p = new Promise((resolve)=>{
             setTimeout(()=>resolve(value), 100);
         });
-        p.then(result=>{
-            return result;
-        }).then(result=>{
+        p.then(result=>result).then(result=>{
             expect(result).to.be.equal(value);
             done();
         });
-
     });
 
-    it('Fulfilled返回Promise传递给下个then方法',done=>{
-        const p1 = new Promise((resolve)=>{
+    it('fulfilled状态回调函数返回promise对象传递给下个同类状态回调函数', done=>{
+        const p1 = new Promise(resolve=>{
             setTimeout(()=>resolve('p1'), 100);
         });
-        const p2 = new Promise((resolve)=>{
-            setTimeout(()=>resolve('p2'), 200);
-        });
-        p1.then(result=>{
-            return p2;
+        p1.then(()=>{
+            return new Promise(resolve=>{
+                setTimeout(()=>resolve('p2'), 200);
+            });
         }).then(result=>{
             expect(result).to.be.equal('p2');
             done();
@@ -75,3 +71,17 @@ describe('测试Promise.then方法', ()=>{
     });
 });
 
+describe('异常处理', ()=>{
+
+    it('实例化Promise时抛出异常，自动转移状态至rejected', done=>{
+
+        const p = new Promise(()=>{
+            throw new Error(123);
+        });
+        p.catch(err=>{
+            expect(err).to.a('error');
+            done();
+        });
+
+    });
+});
