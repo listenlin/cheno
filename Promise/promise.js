@@ -102,7 +102,11 @@ export default class Promise
         const promise = new Promise(r=>resolve=r);
         onFulfillMap.set(this, (...results)=>{
             if (results[0] instanceof Promise) {
+                results[0].then((...results)=>{
+                    resolve(onFulfilled(...results));
+                }, ()=>{
 
+                }).catch();
             } else {
                 resolve(onFulfilled(...results));
             }

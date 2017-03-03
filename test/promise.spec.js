@@ -57,5 +57,21 @@ describe('测试Promise.then方法', ()=>{
         });
 
     });
+
+    it('Fulfilled返回Promise传递给下个then方法',done=>{
+        const p1 = new Promise((resolve)=>{
+            setTimeout(()=>resolve('p1'), 100);
+        });
+        const p2 = new Promise((resolve)=>{
+            setTimeout(()=>resolve('p2'), 200);
+        });
+        p1.then(result=>{
+            return p2;
+        }).then(result=>{
+            expect(result).to.be.equal('p2');
+            done();
+        });
+
+    });
 });
 
