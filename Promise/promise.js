@@ -18,14 +18,17 @@ const nextPromiseMap = new Map();
  * resolve执行后，需在下个事件循环才真正执行的fulfill状态监听器函数
  * 因为需要动态更改其this，所以function申明，而不是箭头函数。
  * 
- * @param {any} result 
+ * @param {any} result - 结果值或异常原因值
+ * @param {boolean} [status=true] - 执行reject还是resolve.
+ * @returns
  */
 const OnCallbackExecuteInNextTick = function(result, status = true) {
     try{
         const onListener = (status ? onFulfillMap : onRejectMap).get(this);
         if (typeof onListener === 'function') {
             result = onListener.call(undefined, result);
-            if (!status) return; // 触发reject，回调一次即可。
+            if (!status) result = undefined; // 如果触发reject，则后续回调都无值。
+            status = true; // 如果触发reject，回调一次即可。后续都去执行resolve.
         }
     } catch (e) {
         result = e;

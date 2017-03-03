@@ -111,7 +111,7 @@ describe('异常处理', ()=>{
         const p = new Promise(()=>{
             throw new Error();
         });
-        let timer;p.p=9;
+        let timer;
         p.catch(err=>{
             timer = setTimeout(()=>{
                 expect(err).to.a('error');
@@ -124,5 +124,44 @@ describe('异常处理', ()=>{
         });
     });
 
-    
+    it('转移至rejected状态时，后续promise会调用reject回调，而后续resolve也会调用', done=>{
+        const p = new Promise(()=>{
+            throw new Error();
+        });
+        let e;
+        p.catch(err=>e=err).then(result=>{
+            expect(e).to.a('error');
+            expect(result).to.be.undefined;
+            done();
+        });
+    });
+
+    it('promise已是fulfill状态，reject无效', done=>{
+        const p = new Promise((resolve, reject)=>{
+            resolve(123);
+            throw new Error();
+        });
+        p.then(r=>{
+            expect(r).to.equal(123);
+            done();
+        },(err)=>{
+            expect(err).to.a('object');// 只为触发错误。
+            done();
+        });
+    });
+
+    it('promise已是reject状态，resolve无效', done=>{
+        const p = new Promise((resolve, reject)=>{
+            reject(new Error);
+            resolve(123);
+        });
+        p.then(r=>{
+            expect(r).to.equal(456);// 只为触发错误
+            done();
+        },(err)=>{
+            expect(err).to.a('error');
+            done();
+        });
+    });
+
 });
