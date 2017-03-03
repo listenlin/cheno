@@ -1,14 +1,14 @@
 {
-  "name": "frontend-wheel",
+  "name": "js-wheel",
   "version": "1.0.0",
-  "description": "自造前端轮子",
+  "description": "自造js轮子",
   "main": "index.js",
   "scripts": {
-    "test": "./node_modules/mocha/bin/mocha --compilers js:babel-core/register"
+    "test": "mocha --compilers js:babel-core/register"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/listenlin/frontend-wheel.git"
+    "url": "git+https://github.com/listenlin/js-wheel.git"
   },
   "keywords": [
     "wheel"
@@ -16,9 +16,9 @@
   "author": "listenlin",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/listenlin/frontend-wheel/issues"
+    "url": "https://github.com/listenlin/js-wheel/issues"
   },
-  "homepage": "https://github.com/listenlin/frontend-wheel#readme",
+  "homepage": "https://github.com/listenlin/js-wheel#readme",
   "devDependencies": {
     "babel-core": "^6.23.1",
     "babel-polyfill": "^6.23.0",
