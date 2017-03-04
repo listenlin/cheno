@@ -1,13 +1,12 @@
-var aplus = require('promises-aplus-tests');
-var describe = require('mocha').describe;
+import aplus from "promises-aplus-tests";
+import {describe} from 'mocha';
 
-require('babel-register');
-var Promise = require('../Promise/promise').default;
+import Promise from '../Promise/promise';
 
-var adapter = {
-    deferred : function () {
-        var pending = {};
-        pending.promise = new Promise(function (resolver, reject) {
+const adapter = {
+    deferred() {
+        const pending = {};
+        pending.promise = new Promise((resolver, reject)=>{
             pending.resolve = resolver;
             pending.reject = reject;
         });
@@ -17,6 +16,6 @@ var adapter = {
     rejected : Promise.reject
 };
 
-describe('Promises/A+ Tests', function () {
+describe('Promises/A+ Tests', ()=>{
     aplus.mocha(adapter);
 });

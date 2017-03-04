@@ -93,6 +93,30 @@ describe('测试Promise.then方法', ()=>{
             done();
         });
     });
+
+    it('在一个已是fufilled状态的promise上使用then，注册的回调会立即拥有此状态执行', done=>{
+        const promise = Promise.resolve();
+        let firstOnFulfilledFinished = false;
+        promise.then(function () {
+            promise.then(function () {
+                expect(firstOnFulfilledFinished).to.be.equal(true);
+                done();
+            });
+            firstOnFulfilledFinished = true;
+        });
+    })
+
+    it('在一个已是rejected状态的promise上使用then，注册的回调会立即拥有此状态执行', done=>{
+        const promise = Promise.reject();
+        let firstOnRejectedFinished = false;
+        promise.then(null, function () {
+            promise.then(null, function () {
+                expect(firstOnRejectedFinished).to.be.equal(true);
+                done();
+            });
+            firstOnRejectedFinished = true;
+        });
+    })
 });
 
 describe('异常处理', ()=>{

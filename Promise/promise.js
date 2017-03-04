@@ -11,6 +11,9 @@ const PromiseStatus = Symbol('PromiseStatus');
 const onFulfillMap = new Map(); // 储存某个promise的fulfilled状态监听函数。
 const onRejectMap = new Map(); // 储存某个promise的rejected状态监听函数。
 
+const onFulfillStatusMap = new Map(); // 某个promise函数的执行情况记录。
+const onRejectStatusMap = new Map(); // 某个promise函数的执行情况记录。
+
 // 以当前promise对象为key, 下一个链式promise对象(then调用时返回)为value。
 const nextPromiseMap = new Map();
 
@@ -19,19 +22,30 @@ const nextPromiseMap = new Map();
  * 因为需要动态更改其this，所以function申明，而不是箭头函数。
  * 
  * @param {any} result - 结果值或异常原因值
- * @param {boolean} [status=true] - 执行reject还是resolve.
+ * @param {Boolean} status - 执行reject为true,resolve为false.
  * @returns
  */
-const OnCallbackExecuteInNextTick = function(result, status = true) {
+const executeCallback = function(result, status) {
+    let callbackResult = result;
+    const onCallbackMap = status ? onFulfillMap : onRejectMap;
     try{
-        const onListener = (status ? onFulfillMap : onRejectMap).get(this);
-        if (typeof onListener === 'function') {
-            result = onListener.call(undefined, result);
-            if (!status) result = undefined; // 如果触发reject，则后续回调都无值。
-            status = true; // 如果触发reject，回调一次即可。后续都去执行resolve.
+        let executed = false;
+        for (let callback of onCallbackMap.get(this)) {
+            if (typeof callback === 'function') {
+                callbackResult = callback.call(undefined, result); 
+                executed = true;  
+            }
+        }
+        // 执行过的回调函数都丢弃掉。
+        onCallbackMap.set(this, []);
+        // rejected回调至少执行过一次。才转换后面的执行为resolve。
+        if (executed && !status) {
+            callbackResult = undefined; // 如果触发reject，则后续回调都无值。
+            status = true; // 不管如何，后续都去执行resolve.
         }
     } catch (e) {
-        result = e;
+        onCallbackMap.set(this, []);
+        callbackResult = e;
         status = false;
     }
     // 如果是resolve,会递归的转移下个promise状态，直到某个nextPromise没有注册过回调函数，
@@ -39,8 +53,18 @@ const OnCallbackExecuteInNextTick = function(result, status = true) {
     // 如果是reject, 会一直去找注册了rejected状态的回调函数来调用，保证只调用一次。
     const nextPromise = nextPromiseMap.get(this);
     if (nextPromise instanceof Promise) {
-        (status ? resolve : reject).call(nextPromise, result);
+        (status ? resolve : reject).call(nextPromise, callbackResult);
     }
+}
+
+/**
+ * next event loop macro-task
+ * 
+ * @param {any} result - 结果值或原因值
+ * @param {String} promiseStatus - Promise状态
+ */
+const delayToNextTick = function(result, promiseStatus) {
+    setTimeout(executeCallback.bind(this), 0, result, promiseStatus === 'fulfilled');
 }
 
 /**
@@ -68,8 +92,7 @@ const resolve = function(result) {
                 error=>reject.call(nextPromise, error)
             );
         } else {
-            // next event loop macro-task
-            setTimeout(OnCallbackExecuteInNextTick.bind(this), 0, result);
+            delayToNextTick.call(this, result, this[PromiseStatus]);
         }
     }
 }
@@ -86,9 +109,8 @@ const reject = function(error) {
 
     this[PromiseStatus] = 'rejected';
     this[PromiseValue] = error;
-    
-    // next event loop macro-task
-    setTimeout(OnCallbackExecuteInNextTick.bind(this), 0, error, false);
+
+    delayToNextTick.call(this, error, this[PromiseStatus]);
 }
 
 /**
@@ -96,7 +118,7 @@ const reject = function(error) {
  * 
  * @class Promise
  */
-export default class Promise
+class Promise
 {
     /**
      * Creates an instance of Promise.
@@ -109,6 +131,9 @@ export default class Promise
         this[PromiseStatus] = 'pending';//fulfilled, rejected
         this[PromiseValue] = undefined;
 
+        onFulfillMap.set(this, []);
+        onRejectMap.set(this, []);
+        
         if (typeof fn === 'function') {
             try{
                 fn(resolve.bind(this), reject.bind(this));
@@ -132,8 +157,15 @@ export default class Promise
         const nextPromise = new Promise();
         
         nextPromiseMap.set(this, nextPromise);
-        onFulfillMap.set(this, onFulfilled);
-        onRejectMap.set(this, onRejected);
+
+        onFulfillMap.get(this).push(onFulfilled);
+        if (this[PromiseStatus] === 'fulfilled') {
+            delayToNextTick.call(this, this[PromiseValue], this[PromiseStatus]);
+        }
+        onRejectMap.get(this).push(onRejected);
+        if (this[PromiseStatus] === 'rejected') {
+            delayToNextTick.call(this, this[PromiseValue], this[PromiseStatus]);
+        }
 
         return nextPromise;
     }
@@ -153,10 +185,23 @@ export default class Promise
 
 }
 
-Promise.resolve = function() {
-
+Promise.resolve = (result)=>{
+    if (result instanceof Promise) {
+        return result;
+    }
+    if (result && typeof result.then === 'function') {
+        return new Promise(result.then);
+    }
+    // @TODO 这里还需要nextTick处理。立即resolve的是在本轮事件循环末尾执行~~
+    return new Promise(resolve => resolve(result));
 };
 
-Promise.reject = function() {
-    
+Promise.reject = (error)=>{
+    return new Promise((resolve, reject) => reject(error));
 };
+
+Promise.all = function() {
+
+}
+
+export default Promise;
