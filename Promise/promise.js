@@ -152,3 +152,11 @@ export default class Promise
     }
 
 }
+
+Promise.resolve = function() {
+
+};
+
+Promise.reject = function() {
+    
+};
