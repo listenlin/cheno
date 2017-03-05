@@ -15,20 +15,20 @@ const onRejectMap = new Map(); // 储存某个promise的rejected状态监听函�
 const nextPromiseMap = new Map();
 
 /**
- * 需异步去执行的状态监听器函数
- * 因为需要动态更改其this，所以function申明，而不是箭头函数。
+ * 执行promise状态的监听器
  * 
+ * @param {Promise} promise - 需要执行回调的promise对象。
  * @param {any} result - 结果值或异常原因值
- * @param {Boolean} status - 执行reject为true,resolve为false.
+ * @param {Boolean} status - 执行reject为true, resolve为false.
  * @returns
  */
-const executeCallback = function(result, status) {
+const executeCallback = (promise, result, status)=>{
     const onCallbackMap = status ? onFulfillMap : onRejectMap;
-    const callbacks = onCallbackMap.get(this);
-    const nextPromise = nextPromiseMap.get(this);
+    const callbacks = onCallbackMap.get(promise);
+    const nextPromises = nextPromiseMap.get(promise);
     // 提前将已执行过的回调函数都丢弃掉，重置为空队列。以免回调中注册的被丢弃掉。
-    onCallbackMap.set(this, []);
-    nextPromiseMap.set(this, []);
+    onCallbackMap.set(promise, []);
+    nextPromiseMap.set(promise, []);
     const executedCallbacks = callbacks.filter((callback, index)=>{
         let callbackResult = result;
         let isFulfill = status;
@@ -44,12 +44,13 @@ const executeCallback = function(result, status) {
                 isFulfill = false;
             }
         }
+        const nextPromise = nextPromises[index];
         // 如果是resolve,会递归的转移下个promise状态，直到某个nextPromise没有注册过回调函数，
         // 也即没有了nextPromise为止。
         // 如果是reject, 会一直去找注册了rejected状态的回调函数来调用，保证只调用一次。
-        if (nextPromise[index] instanceof Promise) {
+        if (nextPromise instanceof Promise) {
             let then;
-            if (nextPromise[index] === callbackResult) {
+            if (nextPromise === callbackResult) {
                 isFulfill = false;
                 callbackResult = new TypeError();
             } else if (typeof callbackResult !== 'undefined' && 
@@ -63,12 +64,12 @@ const executeCallback = function(result, status) {
                     )
                     ||
                     typeof callbackResult === 'function'
-                    ) {
+                ) {
                     //console.log(callbackResult, callbackResult )
                     callbackResult = new Promise(then);
                 }
             }
-            (isFulfill ? resolve : reject).call(nextPromise[index], callbackResult);
+            (isFulfill ? resolve : reject).call(nextPromise, callbackResult);
         }
     });
 
@@ -79,7 +80,11 @@ const executeCallback = function(result, status) {
 }
 
 /**
- * 获取一个可兼容浏览器和node环境的延迟函数。
+ * 获取一个可兼容浏览器和node环境的延迟至栈尾执行的函数。
+ * 如果不支持，将在下个事件循环执行。
+ * 
+ * @param {Function} fn - 需要延迟的函数
+ * @param {...any} [args] - 需要依次传入延迟函数的参数 
  */
 const delayFunc = (()=>{
     if (typeof process !== 'undefined' && process.nextTick) {
@@ -92,13 +97,17 @@ const delayFunc = (()=>{
 })();
 
 /**
- * 使其异步执行
+ * 根据传来的promise对象当前状态，异步执行其状态的回调函数。
  * 
- * @param {any} result - 结果值或原因值
- * @param {String} promiseStatus - Promise状态
+ * @param {Promise} promise - 需要去更改状态的primise对象
  */
-const delayToNextTick = function(result, promiseStatus) {
-    delayFunc(executeCallback.bind(this), result, promiseStatus === 'fulfilled');
+const delayToNextTick = function(promise) {
+    delayFunc(
+        executeCallback,
+        promise,
+        promise[PromiseValue], 
+        promise[PromiseStatus] === 'fulfilled'
+    );
 }
 
 /**
@@ -118,7 +127,7 @@ const resolve = function(result) {
         this[PromiseStatus] = 'fulfilled';
         this[PromiseValue] = result;
         
-        delayToNextTick.call(this, result, this[PromiseStatus]);
+        delayToNextTick(this);
     }
 }
 
@@ -135,7 +144,7 @@ const reject = function(error) {
     this[PromiseStatus] = 'rejected';
     this[PromiseValue] = error;
 
-    delayToNextTick.call(this, error, this[PromiseStatus]);
+    delayToNextTick(this);
 }
 
 /**
@@ -181,16 +190,15 @@ class Promise
     then(onFulfilled, onRejected)
     {
         const nextPromise = new Promise();
-        
         nextPromiseMap.get(this).push(nextPromise);
 
         onFulfillMap.get(this).push(onFulfilled);
         if (this[PromiseStatus] === 'fulfilled') {
-            delayToNextTick.call(this, this[PromiseValue], this[PromiseStatus]);
+            delayToNextTick(this);
         }
         onRejectMap.get(this).push(onRejected);
         if (this[PromiseStatus] === 'rejected') {
-            delayToNextTick.call(this, this[PromiseValue], this[PromiseStatus]);
+            delayToNextTick(this);
         }
 
         return nextPromise;
