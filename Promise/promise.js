@@ -141,21 +141,21 @@ const delayToNextTick = function(promise) {
  */
 const resolve = function(result) {
     if (this[PromiseStatus] !== 'pending') return;
-    const then = isThenable(result);
-    if (then) {
-        try{
+    try{
+        const then = isThenable(result);
+        if (then) {
             // 使当前Promise对象状态，依赖上层promise。
             then(resolve.bind(this), reject.bind(this));
-        } catch(e) {
-            reject.call(this, e);
+            return;
         }
-    } else {
-        // 调用resolve之后，状态要立马确定，防止接着调用reject更改其状态。
-        this[PromiseStatus] = 'fulfilled';
-        this[PromiseValue] = result;
-        
-        delayToNextTick(this);
+    } catch(e) {
+        reject.call(this, e);
     }
+    // 调用resolve之后，状态要立马确定，防止接着调用reject更改其状态。
+    this[PromiseStatus] = 'fulfilled';
+    this[PromiseValue] = result;
+    
+    delayToNextTick(this);
 }
 
 /**
