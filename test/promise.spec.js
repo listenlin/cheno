@@ -104,7 +104,7 @@ describe('测试Promise.then方法', ()=>{
             });
             firstOnFulfilledFinished = true;
         });
-    })
+    });
 
     it('在一个已是rejected状态的promise上使用then，注册的回调会立即拥有此状态执行', done=>{
         const promise = Promise.reject();
@@ -116,7 +116,66 @@ describe('测试Promise.then方法', ()=>{
             });
             firstOnRejectedFinished = true;
         });
-    })
+    });
+
+    const delayCountCall = (fn, count)=>{
+        let i = 1;
+        return (...p)=>{
+            return count === i ? fn(...p) : i++;
+        }
+    };
+
+    it('同一个fulfilled状态的promise建立多个分支各自独立传递自己的状态', d=>{    
+        const done = delayCountCall(d, 3);
+        const promise = Promise.resolve(521);
+
+        promise.then((r)=>{
+            return r;
+        }).then((r)=>{
+            expect(r).to.be.equal(521);
+            done();
+        });
+
+        promise.then(()=>{
+            throw new Error(123);
+        }).catch((r)=>{
+            expect(r).to.be.an('error');
+            done();
+        });
+
+        promise.then((r)=>{
+            return r;
+        }).then((r)=>{
+            expect(r).to.be.equal(521);
+            done();
+        });
+    });
+
+    it('同一个rejected状态的promise建立多个分支各自独立传递自己的状态', d=>{    
+        const done = delayCountCall(d, 3);
+        const promise = Promise.reject(new Error('failed'));
+
+        promise.then(null, (r)=>{
+            return 503;
+        }).then((r)=>{
+            expect(r).to.be.equal(503);
+            done();
+        });
+
+        promise.then(null, ()=>{
+            throw new Error();
+        }).catch((r)=>{
+            expect(r).to.be.an('error');
+            done();
+        });
+
+        promise.then(null, (r)=>{
+            return r;
+        }).then((r)=>{
+            expect(r.message).to.be.equal('failed');
+            done();
+        });
+    });
 });
 
 describe('异常处理', ()=>{
@@ -155,7 +214,16 @@ describe('异常处理', ()=>{
         let e;
         p.catch(err=>e=err).then(result=>{
             expect(e).to.a('error');
-            expect(result).to.be.undefined;
+            expect(result).to.a('error');
+            done();
+        });
+    });
+
+    it('抛出null', done=>{
+        Promise.resolve({}).then(()=>{
+            throw null;
+        }).then(null, (e)=>{
+            expect(e).to.be.null;
             done();
         });
     });

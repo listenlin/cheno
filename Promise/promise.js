@@ -1,5 +1,5 @@
 /**
- * 按照ES6的Promise对象，实现一模一样的功能。
+ * 按照ES6的Promise或符合Promise/A+规范的对象，实现一致的功能。
  * @copyright Copyright(c) 2017 listenlin.
  * @author listenlin <listenlin521@foxmail.com>
  */
@@ -11,14 +11,11 @@ const PromiseStatus = Symbol('PromiseStatus');
 const onFulfillMap = new Map(); // 储存某个promise的fulfilled状态监听函数。
 const onRejectMap = new Map(); // 储存某个promise的rejected状态监听函数。
 
-const onFulfillStatusMap = new Map(); // 某个promise函数的执行情况记录。
-const onRejectStatusMap = new Map(); // 某个promise函数的执行情况记录。
-
 // 以当前promise对象为key, 下一个链式promise对象(then调用时返回)为value。
 const nextPromiseMap = new Map();
 
 /**
- * resolve执行后，需在下个事件循环才真正执行的fulfill状态监听器函数
+ * 需异步去执行的状态监听器函数
  * 因为需要动态更改其this，所以function申明，而不是箭头函数。
  * 
  * @param {any} result - 结果值或异常原因值
@@ -26,45 +23,82 @@ const nextPromiseMap = new Map();
  * @returns
  */
 const executeCallback = function(result, status) {
-    let callbackResult = result;
     const onCallbackMap = status ? onFulfillMap : onRejectMap;
-    try{
-        let executed = false;
-        for (let callback of onCallbackMap.get(this)) {
-            if (typeof callback === 'function') {
+    const callbacks = onCallbackMap.get(this);
+    const nextPromise = nextPromiseMap.get(this);
+    // 提前将已执行过的回调函数都丢弃掉，重置为空队列。以免回调中注册的被丢弃掉。
+    onCallbackMap.set(this, []);
+    nextPromiseMap.set(this, []);
+    const executedCallbacks = callbacks.filter((callback, index)=>{
+        let callbackResult = result;
+        let isFulfill = status;
+        if (typeof callback === 'function') {
+            try{
                 callbackResult = callback.call(undefined, result); 
-                executed = true;  
+                // rejected回调至少执行过一次。才转换后面的执行为resolve。
+                if (!isFulfill) {
+                    isFulfill = true; // 后续都去执行resolve.
+                }
+            } catch (e) {
+                callbackResult = e;
+                isFulfill = false;
             }
         }
-        // 执行过的回调函数都丢弃掉。
-        onCallbackMap.set(this, []);
-        // rejected回调至少执行过一次。才转换后面的执行为resolve。
-        if (executed && !status) {
-            callbackResult = undefined; // 如果触发reject，则后续回调都无值。
-            status = true; // 不管如何，后续都去执行resolve.
+        // 如果是resolve,会递归的转移下个promise状态，直到某个nextPromise没有注册过回调函数，
+        // 也即没有了nextPromise为止。
+        // 如果是reject, 会一直去找注册了rejected状态的回调函数来调用，保证只调用一次。
+        if (nextPromise[index] instanceof Promise) {
+            let then;
+            if (nextPromise[index] === callbackResult) {
+                isFulfill = false;
+                callbackResult = new TypeError();
+            } else if (typeof callbackResult !== 'undefined' && 
+                !(callbackResult instanceof Promise) &&
+                callbackResult &&
+                typeof (then = callbackResult.then) === 'function'
+            ) {
+                if (
+                    (callbackResult.__proto__ && 
+                    callbackResult.__proto__ !== Object.prototype
+                    )
+                    ||
+                    typeof callbackResult === 'function'
+                    ) {
+                    //console.log(callbackResult, callbackResult )
+                    callbackResult = new Promise(then);
+                }
+            }
+            (isFulfill ? resolve : reject).call(nextPromise[index], callbackResult);
         }
-    } catch (e) {
-        onCallbackMap.set(this, []);
-        callbackResult = e;
-        status = false;
-    }
-    // 如果是resolve,会递归的转移下个promise状态，直到某个nextPromise没有注册过回调函数，
-    // 也即没有了nextPromise为止。
-    // 如果是reject, 会一直去找注册了rejected状态的回调函数来调用，保证只调用一次。
-    const nextPromise = nextPromiseMap.get(this);
-    if (nextPromise instanceof Promise) {
-        (status ? resolve : reject).call(nextPromise, callbackResult);
+    });
+
+    if (!status && executedCallbacks.length === 0) {
+        // 没有注册rejected状态回调函数，直接抛出异常错误。
+        // throw result;
     }
 }
 
 /**
- * next event loop macro-task
+ * 获取一个可兼容浏览器和node环境的延迟函数。
+ */
+const delayFunc = (()=>{
+    if (typeof process !== 'undefined' && process.nextTick) {
+        return process.nextTick;
+    }
+    if (typeof setImmediate === 'function') {
+        return setImmediate;
+    }
+    return (fn, ...p)=>setTimeout(fn, 0, ...p);
+})();
+
+/**
+ * 使其异步执行
  * 
  * @param {any} result - 结果值或原因值
  * @param {String} promiseStatus - Promise状态
  */
 const delayToNextTick = function(result, promiseStatus) {
-    setTimeout(executeCallback.bind(this), 0, result, promiseStatus === 'fulfilled');
+    delayFunc(executeCallback.bind(this), result, promiseStatus === 'fulfilled');
 }
 
 /**
@@ -84,16 +118,7 @@ const resolve = function(result) {
         this[PromiseStatus] = 'fulfilled';
         this[PromiseValue] = result;
         
-        // 当回调值为promise对象时，nextPromise对象等待返回的promise状态变化
-        if (result instanceof Promise) {
-            const nextPromise = nextPromiseMap.get(this);
-            result.then(
-                result=>resolve.call(nextPromise, result),
-                error=>reject.call(nextPromise, error)
-            );
-        } else {
-            delayToNextTick.call(this, result, this[PromiseStatus]);
-        }
+        delayToNextTick.call(this, result, this[PromiseStatus]);
     }
 }
 
@@ -133,6 +158,7 @@ class Promise
 
         onFulfillMap.set(this, []);
         onRejectMap.set(this, []);
+        nextPromiseMap.set(this, []);
         
         if (typeof fn === 'function') {
             try{
@@ -156,7 +182,7 @@ class Promise
     {
         const nextPromise = new Promise();
         
-        nextPromiseMap.set(this, nextPromise);
+        nextPromiseMap.get(this).push(nextPromise);
 
         onFulfillMap.get(this).push(onFulfilled);
         if (this[PromiseStatus] === 'fulfilled') {
@@ -203,5 +229,7 @@ Promise.reject = (error)=>{
 Promise.all = function() {
 
 }
+
+Object.freeze(Promise);
 
 export default Promise;
