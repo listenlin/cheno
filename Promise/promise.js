@@ -14,6 +14,39 @@ const onRejectMap = new Map(); // 储存某个promise的rejected状态监听函�
 // 以当前promise对象为key, 下一个链式promise对象(then调用时返回)为value。
 const nextPromiseMap = new Map();
 
+
+/**
+ * 处理用户回调的返回值。根据官方标准，不同返回值需要不同处理。
+ * 
+ * @param {Promise} nextPromise - 下个要更改状态的promise
+ * @param {Boolean} isFulfill - 是否更改为fulfill
+ * @param {any} result - 结果值或原因值
+ * @returns {Array}
+ */
+const filterResult = (nextPromise, isFulfill, result)=>{
+    let then;
+    if (nextPromise === result) {
+        isFulfill = false;
+        result = new TypeError();
+    } else if (typeof result !== 'undefined' && 
+        !(result instanceof Promise) &&
+        result &&
+        typeof (then = result.then) === 'function'
+    ) {
+        if (
+            (result.__proto__ && 
+            result.__proto__ !== Object.prototype
+            )
+            ||
+            typeof result === 'function'
+        ) {
+            //console.log(result, result )
+            return [isFulfill, new Promise(then)];
+        }
+    }
+    return [isFulfill, result];
+}
+
 /**
  * 执行promise状态的监听器
  * 
@@ -32,45 +65,23 @@ const executeCallback = (promise, result, status)=>{
     const executedCallbacks = callbacks.filter((callback, index)=>{
         let callbackResult = result;
         let isFulfill = status;
-        if (typeof callback === 'function') {
+        const isFunction = typeof callback === 'function';
+        if (isFunction) {
             try{
                 callbackResult = callback.call(undefined, result); 
-                // rejected回调至少执行过一次。才转换后面的执行为resolve。
-                if (!isFulfill) {
-                    isFulfill = true; // 后续都去执行resolve.
-                }
+                isFulfill = true; // 只要没有异常，后续都去执行resolve.
             } catch (e) {
                 callbackResult = e;
                 isFulfill = false;
             }
         }
         const nextPromise = nextPromises[index];
-        // 如果是resolve,会递归的转移下个promise状态，直到某个nextPromise没有注册过回调函数，
-        // 也即没有了nextPromise为止。
-        // 如果是reject, 会一直去找注册了rejected状态的回调函数来调用，保证只调用一次。
+        // 更改下个promise的状态。
         if (nextPromise instanceof Promise) {
-            let then;
-            if (nextPromise === callbackResult) {
-                isFulfill = false;
-                callbackResult = new TypeError();
-            } else if (typeof callbackResult !== 'undefined' && 
-                !(callbackResult instanceof Promise) &&
-                callbackResult &&
-                typeof (then = callbackResult.then) === 'function'
-            ) {
-                if (
-                    (callbackResult.__proto__ && 
-                    callbackResult.__proto__ !== Object.prototype
-                    )
-                    ||
-                    typeof callbackResult === 'function'
-                ) {
-                    //console.log(callbackResult, callbackResult )
-                    callbackResult = new Promise(then);
-                }
-            }
+            [isFulfill, callbackResult] = filterResult(nextPromise, isFulfill, callbackResult);
             (isFulfill ? resolve : reject).call(nextPromise, callbackResult);
         }
+        return isFunction;
     });
 
     if (!status && executedCallbacks.length === 0) {
@@ -189,17 +200,12 @@ class Promise
      */
     then(onFulfilled, onRejected)
     {
+        onFulfillMap.get(this).push(onFulfilled);
+        onRejectMap.get(this).push(onRejected);
+        if (this[PromiseStatus] !== 'pending') delayToNextTick(this);
+
         const nextPromise = new Promise();
         nextPromiseMap.get(this).push(nextPromise);
-
-        onFulfillMap.get(this).push(onFulfilled);
-        if (this[PromiseStatus] === 'fulfilled') {
-            delayToNextTick(this);
-        }
-        onRejectMap.get(this).push(onRejected);
-        if (this[PromiseStatus] === 'rejected') {
-            delayToNextTick(this);
-        }
 
         return nextPromise;
     }
