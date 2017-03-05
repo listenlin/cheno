@@ -81,6 +81,19 @@ describe('测试Promise.then方法', ()=>{
         });
     });
 
+    it('thenable的then方法调用时抛出异常', done=>{
+        Promise.resolve().then(()=>{
+            return {
+                then: function (resolvePromise) {
+                    throw new Error;
+                }
+            };
+        }).then(null, (e)=>{
+            expect(e).to.be.an('error');
+            done();
+        });
+    })
+
     it('fulfilled状态回调函数抛异常，传递给直到后续某个promise注册的rejected回调函数为止', done=>{
         const p1 = new Promise(resolve=>{
             setTimeout(()=>resolve('p1'), 100);
@@ -227,6 +240,33 @@ describe('异常处理', ()=>{
             done();
         });
     });
+
+    it('resolve传入参数和onFulfilled返回值是一个thenable', done=>{
+        Promise.resolve().then(()=>{
+            return {
+                then:(resolve, reject)=>{
+                    resolve({
+                        then:(r)=>r(1234)
+                    });
+            }};
+        }).then((e)=>{
+            expect(e).to.equal(1234);
+            done();
+        });
+    })
+
+    it('onFulfilled返回一个thenable, resolve传入fulfilled的promise', done=>{
+        Promise.resolve().then(()=>{
+            return {
+                then(resolve, reject){
+                    resolve(Promise.resolve('sdf'));
+                }
+            };
+        }).then((e)=>{
+            expect(e).to.equal('sdf');
+            done();
+        });
+    })
 
     it('promise已是fulfill状态，reject无效', done=>{
         const p = new Promise((resolve, reject)=>{

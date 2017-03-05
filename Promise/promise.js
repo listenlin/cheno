@@ -14,6 +14,21 @@ const onRejectMap = new Map(); // 储存某个promise的rejected状态监听函�
 // 以当前promise对象为key, 下一个链式promise对象(then调用时返回)为value。
 const nextPromiseMap = new Map();
 
+/**
+ * 判断一个值是否是thenable对象。
+ * 
+ * @param {any} result - 需判断的值
+ * @returns {Function|Boolean} 如果是一个thenable，返回then函数，否则返回false。
+ */
+const isThenable = (result)=>{
+    if (typeof result !== 'undefined' && result) {
+        const then = result.then; // 注意：如果then是个属性，只允许调用一次。
+        if (typeof then === 'function') {
+            return then.bind(result);
+        }
+    }
+    return false;
+}
 
 /**
  * 处理用户回调的返回值。根据官方标准，不同返回值需要不同处理。
@@ -24,25 +39,12 @@ const nextPromiseMap = new Map();
  * @returns {Array}
  */
 const filterResult = (nextPromise, isFulfill, result)=>{
+    if (!isFulfill) return [isFulfill, result];
     let then;
     if (nextPromise === result) {
-        isFulfill = false;
-        result = new TypeError();
-    } else if (typeof result !== 'undefined' && 
-        !(result instanceof Promise) &&
-        result &&
-        typeof (then = result.then) === 'function'
-    ) {
-        if (
-            (result.__proto__ && 
-            result.__proto__ !== Object.prototype
-            )
-            ||
-            typeof result === 'function'
-        ) {
-            //console.log(result, result )
-            return [isFulfill, new Promise(then)];
-        }
+        return [false, new TypeError()];
+    } else if (then = isThenable(result)) {
+        return [isFulfill, new Promise(then)];
     }
     return [isFulfill, result];
 }
@@ -78,7 +80,16 @@ const executeCallback = (promise, result, status)=>{
         const nextPromise = nextPromises[index];
         // 更改下个promise的状态。
         if (nextPromise instanceof Promise) {
-            [isFulfill, callbackResult] = filterResult(nextPromise, isFulfill, callbackResult);
+            try{
+                [isFulfill, callbackResult] = filterResult(
+                    nextPromise,
+                    isFulfill,
+                    callbackResult
+                );
+            } catch (e) {
+                isFulfill = false;
+                callbackResult = e;
+            }
             (isFulfill ? resolve : reject).call(nextPromise, callbackResult);
         }
         return isFunction;
@@ -130,9 +141,14 @@ const delayToNextTick = function(promise) {
  */
 const resolve = function(result) {
     if (this[PromiseStatus] !== 'pending') return;
-    if (result instanceof Promise) {
-        // 使当前Promise对象状态，依赖上层promise。
-        result.then(resolve.bind(this), reject.bind(this));
+    const then = isThenable(result);
+    if (then) {
+        try{
+            // 使当前Promise对象状态，依赖上层promise。
+            then(resolve.bind(this), reject.bind(this));
+        } catch(e) {
+            reject.call(this, e);
+        }
     } else {
         // 调用resolve之后，状态要立马确定，防止接着调用reject更改其状态。
         this[PromiseStatus] = 'fulfilled';
