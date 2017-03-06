@@ -12,8 +12,8 @@ const adapter = {
         });
         return pending;
     },
-    resolved : Promise.resolve,
-    rejected : Promise.reject
+    resolved : (...u)=>Promise.resolve(...u),
+    rejected : (...u)=>Promise.reject(...u)
 };
 
 describe('Promises/A+ Tests', ()=>{

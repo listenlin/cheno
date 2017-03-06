@@ -92,7 +92,54 @@ describe('测试Promise.then方法', ()=>{
             expect(e).to.be.an('error');
             done();
         });
-    })
+    });
+
+    it('在thenable中尝试两次resolve', done=>{
+        Promise.resolve().then(()=>{
+            return {
+                then: function (resolvePromise) {
+                    resolvePromise(Promise.resolve(123));
+                    resolvePromise(456);
+                }
+            }
+        }).then((e)=>{
+            expect(e).to.be.equal(123);
+            done();
+        });
+    });
+
+    it('异步回调thenable的resolvePromise', done=>{
+        Promise.resolve().then(()=>{
+            return {
+                then: function (resolvePromise) {
+                    setTimeout(()=>resolvePromise(456), 0);
+                }
+            }
+        }).then((e)=>{
+            expect(e).to.be.equal(456);
+            done();
+        });
+    });
+
+    it('异步回调thenable的resolvePromise被调用两次，任何状态下只有第一次起作用。', done=>{
+        Promise.resolve().then(()=>{
+            return {
+                then(resolvePromise) {
+                    resolvePromise({
+                        then: function (onFulfilled) {
+                            setTimeout(function () {
+                                onFulfilled(123);
+                            }, 0);
+                        }
+                    });
+                    resolvePromise(Promise.resolve(456));
+                }
+            }
+        }).then((e)=>{
+            expect(e).to.be.equal(123);
+            done();
+        });
+    });
 
     it('fulfilled状态回调函数抛异常，传递给直到后续某个promise注册的rejected回调函数为止', done=>{
         const p1 = new Promise(resolve=>{

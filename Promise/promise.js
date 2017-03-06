@@ -31,25 +31,6 @@ const isThenable = (result)=>{
 }
 
 /**
- * 处理用户回调的返回值。根据官方标准，不同返回值需要不同处理。
- * 
- * @param {Promise} nextPromise - 下个要更改状态的promise
- * @param {Boolean} isFulfill - 是否更改为fulfill
- * @param {any} result - 结果值或原因值
- * @returns {Array}
- */
-const filterResult = (nextPromise, isFulfill, result)=>{
-    if (!isFulfill) return [isFulfill, result];
-    let then;
-    if (nextPromise === result) {
-        return [false, new TypeError()];
-    } else if (then = isThenable(result)) {
-        return [isFulfill, new Promise(then)];
-    }
-    return [isFulfill, result];
-}
-
-/**
  * 执行promise状态的监听器
  * 
  * @param {Promise} promise - 需要执行回调的promise对象。
@@ -80,16 +61,6 @@ const executeCallback = (promise, result, status)=>{
         const nextPromise = nextPromises[index];
         // 更改下个promise的状态。
         if (nextPromise instanceof Promise) {
-            try{
-                [isFulfill, callbackResult] = filterResult(
-                    nextPromise,
-                    isFulfill,
-                    callbackResult
-                );
-            } catch (e) {
-                isFulfill = false;
-                callbackResult = e;
-            }
             (isFulfill ? resolve : reject).call(nextPromise, callbackResult);
         }
         return isFunction;
@@ -123,13 +94,67 @@ const delayFunc = (()=>{
  * 
  * @param {Promise} promise - 需要去更改状态的primise对象
  */
-const delayToNextTick = function(promise) {
+const delayToNextTick = promise=>{
     delayFunc(
         executeCallback,
         promise,
         promise[PromiseValue], 
         promise[PromiseStatus] === 'fulfilled'
     );
+}
+
+/**
+ * 高级函数，让传入的函数只能被执行一次。
+ * 
+ * @param {Function} fn - 需要只执行一次的函数
+ * @param {any} [context=undefined] - 执行函数时，其this变量指向谁。
+ * @returns {Function}
+ */
+const executeOnce = (fn, context = undefined)=>{
+    let once = false;
+    return (...p)=>{
+        if (!once) {
+            once = true;
+            return fn.call(context, ...p);
+        }
+    }
+};
+
+/**
+ * 解析promise流程
+ * [[Resolve]](promise, x)
+ * https://github.com/promises-aplus/promises-spec#the-promise-resolution-procedure 官方提供流程算法
+ * 
+ * @param {Promise} promise - 需要解析的promise对象
+ * @param {any} x - 用户传来的值，通过resolve或resolvePromise参数、onFulfilled返回值传入。
+ */
+const resolutionProcedure = (promise, x)=>{
+    if (promise instanceof Promise && promise === x) {
+        return reject.call(promise, new TypeError());
+    }
+    if (x instanceof Promise) {
+        if (x[PromiseStatus] === 'pending') {
+            x.then(executeOnce(resolve, promise), executeOnce(reject, promise));
+        } else {
+            promise[PromiseValue] = x[PromiseValue];
+            promise[PromiseStatus] = x[PromiseStatus];
+            delayToNextTick(promise);
+        }
+        return;
+    }
+    if (x && (typeof x === 'object' || typeof x === 'function')) {
+        try{
+            const then = x.then;
+            if (typeof then === 'function') {
+                return then.call(x, executeOnce(resolve, promise), executeOnce(reject, promise));
+            }
+        } catch(e) {
+            return reject.call(promise, e);
+        }
+    }
+    promise[PromiseStatus] = 'fulfilled';
+    promise[PromiseValue] = x;
+    delayToNextTick(promise);
 }
 
 /**
@@ -141,21 +166,7 @@ const delayToNextTick = function(promise) {
  */
 const resolve = function(result) {
     if (this[PromiseStatus] !== 'pending') return;
-    try{
-        const then = isThenable(result);
-        if (then) {
-            // 使当前Promise对象状态，依赖上层promise。
-            then(resolve.bind(this), reject.bind(this));
-            return;
-        }
-    } catch(e) {
-        reject.call(this, e);
-    }
-    // 调用resolve之后，状态要立马确定，防止接着调用reject更改其状态。
-    this[PromiseStatus] = 'fulfilled';
-    this[PromiseValue] = result;
-    
-    delayToNextTick(this);
+    resolutionProcedure(this, result);
 }
 
 /**
@@ -198,7 +209,7 @@ class Promise
         
         if (typeof fn === 'function') {
             try{
-                fn(resolve.bind(this), reject.bind(this));
+                fn(executeOnce(resolve, this), executeOnce(reject, this));
             } catch(e) {
                 reject.call(this, e);
             }
@@ -239,17 +250,32 @@ class Promise
         return this.then(null, onRejected);
     }
 
+    get[Symbol.toStringTag]() {
+        return 'Promise';
+    }
+
 }
 
 Promise.resolve = (result)=>{
     if (result instanceof Promise) {
         return result;
     }
-    if (result && typeof result.then === 'function') {
-        return new Promise(result.then);
+    let promise;
+    try{
+        const then = isThenable(result);
+        if (then) {
+            promise = new Promise(then);
+        } else {
+            promise = new Promise(resolve => resolve(result));
+        }
+    } catch(e) {
+        if (promise) {
+            reject.call(promise, e);
+        } else {
+            promise = Promise.reject(e);
+        }
     }
-    // @TODO 这里还需要nextTick处理。立即resolve的是在本轮事件循环末尾执行~~
-    return new Promise(resolve => resolve(result));
+    return promise;
 };
 
 Promise.reject = (error)=>{
