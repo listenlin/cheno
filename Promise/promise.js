@@ -21,7 +21,7 @@ const nextPromiseMap = new Map();
  * @returns {Function|Boolean} 如果是一个thenable，返回then函数，否则返回false。
  */
 const isThenable = (result)=>{
-    if (typeof result !== 'undefined' && result) {
+    if (typeof result === 'object' || typeof result === 'function') {
         const then = result.then; // 注意：如果then是个属性，只允许调用一次。
         if (typeof then === 'function') {
             return then.bind(result);
@@ -104,20 +104,30 @@ const delayToNextTick = promise=>{
 }
 
 /**
- * 高级函数，让传入的函数只能被执行一次。
+ * 高级函数，让传入的resolve和reject函数同时只能被执行一次。
  * 
- * @param {Function} fn - 需要只执行一次的函数
+ * @param {Function} resolve - 需要只执行一次的函数
+ * @param {Function} reject - 需要只执行一次的函数
  * @param {any} [context=undefined] - 执行函数时，其this变量指向谁。
- * @returns {Array} 返回数组，索引0是封装的函数，索引1是一个执行状态对象，可获取是否被执行的信息。
+ * @returns {Array} 返回数组，索引0和1是封装的函数，索引2是一个执行状态对象，可获取是否被执行的信息。
  */
-const executeOnce = (fn, context = undefined)=>{
+const executeOnce = (resolve, reject, context = undefined)=>{
     let status = {executed : false};
-    return [(...p)=>{
-        if (!status.executed) {
-            status.executed = true;
-            return fn.call(context, ...p);
-        }
-    }, status];
+    return [
+        (...p)=>{
+            if (!status.executed) {
+                status.executed = true;
+                return resolve.call(context, ...p);
+            }
+        },
+        (...p)=>{
+            if (!status.executed) {
+                status.executed = true;
+                return reject.call(context, ...p);
+            }
+        },
+        status
+    ];
 };
 
 /**
@@ -134,7 +144,7 @@ const resolutionProcedure = (promise, x)=>{
     }
     if (x instanceof Promise) {
         if (x[PromiseStatus] === 'pending') {
-            x.then(executeOnce(resolve, promise)[0], executeOnce(reject, promise)[0]);
+            x.then(...executeOnce(resolve, reject, promise));
         } else {
             promise[PromiseValue] = x[PromiseValue];
             promise[PromiseStatus] = x[PromiseStatus];
@@ -150,14 +160,12 @@ const resolutionProcedure = (promise, x)=>{
             return reject.call(promise, e);
         }
         if (typeof then === 'function') {
-            const [resolvePromise, resolveStatus] = executeOnce(resolve, promise);
-            const [rejectPromise, rejectStatus] = executeOnce(reject, promise);
-            
+            const [resolvePromise, rejectPromise, status] = executeOnce(resolve, reject, promise);
             try {
                 then.call(x, resolvePromise, rejectPromise);
             } catch(e) {
                 // 保证抛异常后，执行了某个方法，异常无效。
-                if (!resolveStatus.executed && !rejectStatus.executed) {
+                if (!status.executed) {
                     reject.call(promise, e);
                 }
             }
@@ -220,13 +228,12 @@ class Promise
         nextPromiseMap.set(this, []);
         
         if (typeof fn === 'function') {
-            const [resolvePromise, resolveStatus] = executeOnce(resolve, this);
-            const [rejectPromise, rejectStatus] = executeOnce(reject, this);
+            const [resolvePromise, rejectPromise, status] = executeOnce(resolve, reject, this);
             try{
                 fn(resolvePromise, rejectPromise);
             } catch(e) {
                 // 保证抛异常后，执行了某个方法，异常无效。
-                if (!resolveStatus.executed && !rejectStatus.executed) {
+                if (!status.executed) {
                     reject.call(this, e);
                 }
             }
