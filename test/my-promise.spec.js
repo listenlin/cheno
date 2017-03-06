@@ -141,6 +141,27 @@ describe('测试Promise.then方法', ()=>{
         });
     });
 
+it('异步回调thenable的resolvePromise被调用两次,第一次调用抛出异常，第二次调用也应无效。', done=>{
+        Promise.resolve().then(()=>{
+            return {
+                then(resolvePromise) {
+                    resolvePromise({
+                        then: function (onFulfilled) {
+                            setTimeout(function () {
+                                onFulfilled(123);
+                            }, 0);
+                        }
+                    });
+                    throw new Error;
+                }
+            }
+        }).then((e)=>{
+            expect(e).to.be.equal(123);
+            done();
+        });
+    });
+
+
     it('fulfilled状态回调函数抛异常，传递给直到后续某个promise注册的rejected回调函数为止', done=>{
         const p1 = new Promise(resolve=>{
             setTimeout(()=>resolve('p1'), 100);

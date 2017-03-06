@@ -108,16 +108,16 @@ const delayToNextTick = promise=>{
  * 
  * @param {Function} fn - 需要只执行一次的函数
  * @param {any} [context=undefined] - 执行函数时，其this变量指向谁。
- * @returns {Function}
+ * @returns {Array} 返回数组，索引0是封装的函数，索引1是一个执行状态对象，可获取是否被执行的信息。
  */
 const executeOnce = (fn, context = undefined)=>{
-    let once = false;
-    return (...p)=>{
-        if (!once) {
-            once = true;
+    let status = {executed : false};
+    return [(...p)=>{
+        if (!status.executed) {
+            status.executed = true;
             return fn.call(context, ...p);
         }
-    }
+    }, status];
 };
 
 /**
@@ -134,7 +134,7 @@ const resolutionProcedure = (promise, x)=>{
     }
     if (x instanceof Promise) {
         if (x[PromiseStatus] === 'pending') {
-            x.then(executeOnce(resolve, promise), executeOnce(reject, promise));
+            x.then(executeOnce(resolve, promise)[0], executeOnce(reject, promise)[0]);
         } else {
             promise[PromiseValue] = x[PromiseValue];
             promise[PromiseStatus] = x[PromiseStatus];
@@ -143,13 +143,25 @@ const resolutionProcedure = (promise, x)=>{
         return;
     }
     if (x && (typeof x === 'object' || typeof x === 'function')) {
+        let then;
         try{
-            const then = x.then;
-            if (typeof then === 'function') {
-                return then.call(x, executeOnce(resolve, promise), executeOnce(reject, promise));
-            }
+            then = x.then;
         } catch(e) {
             return reject.call(promise, e);
+        }
+        if (typeof then === 'function') {
+            const [resolvePromise, resolveStatus] = executeOnce(resolve, promise);
+            const [rejectPromise, rejectStatus] = executeOnce(reject, promise);
+            
+            try {
+                then.call(x, resolvePromise, rejectPromise);
+            } catch(e) {
+                // 保证抛异常后，执行了某个方法，异常无效。
+                if (!resolveStatus.executed && !rejectStatus.executed) {
+                    reject.call(promise, e);
+                }
+            }
+            return;
         }
     }
     promise[PromiseStatus] = 'fulfilled';
@@ -208,10 +220,15 @@ class Promise
         nextPromiseMap.set(this, []);
         
         if (typeof fn === 'function') {
+            const [resolvePromise, resolveStatus] = executeOnce(resolve, this);
+            const [rejectPromise, rejectStatus] = executeOnce(reject, this);
             try{
-                fn(executeOnce(resolve, this), executeOnce(reject, this));
+                fn(resolvePromise, rejectPromise);
             } catch(e) {
-                reject.call(this, e);
+                // 保证抛异常后，执行了某个方法，异常无效。
+                if (!resolveStatus.executed && !rejectStatus.executed) {
+                    reject.call(this, e);
+                }
             }
         }
     }
