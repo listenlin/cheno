@@ -83,18 +83,19 @@ const delayFunc = (()=>{
     if (typeof process !== 'undefined' && process.nextTick) {
         return process.nextTick;
     }
-    if (typeof window === 'undefined') {
+    if (typeof window !== 'undefined') {
         // Firefox和Chrome早期版本中带有前缀
         const MutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
+        // 使用MutationObserver来实现nextTick。
         if(typeof MutationObserver !== 'undefined') {
             let counter = 1;
             let callbacks = [];
             const observer = new MutationObserver(()=>{
-                callbacks = callbacks.filter(([fn, ...params])=>{
+                const copys = callbacks.splice(0);
+                copys.forEach(([fn, ...params])=>{
                     if (typeof fn === 'function') {
                         fn.apply(undefined, params);
                     }
-                    return false;
                 });
             });
             const textNode = document.createTextNode(counter);
