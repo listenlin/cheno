@@ -6,7 +6,7 @@
  */
 
 const PromiseValue = Symbol('PromiseValue');
-const PromiseStatus = Symbol('PromiseStatus');
+const PromiseState = Symbol('PromiseState');
 
 const onFulfillMap = new Map(); // 储存某个promise的fulfilled状态监听函数。
 const onRejectMap = new Map(); // 储存某个promise的rejected状态监听函数。
@@ -88,8 +88,7 @@ const delayFunc = (()=>{
         const MutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
         // 使用MutationObserver来实现nextTick。
         if(typeof MutationObserver !== 'undefined') {
-            let counter = 1;
-            let callbacks = [];
+            let counter = 1, callbacks = [];
             const observer = new MutationObserver(()=>{
                 const copys = callbacks.splice(0);
                 copys.forEach(([fn, ...params])=>{
@@ -99,9 +98,7 @@ const delayFunc = (()=>{
                 });
             });
             const textNode = document.createTextNode(counter);
-            observer.observe(textNode, {
-                characterData : true
-            });
+            observer.observe(textNode, {characterData: true});
             return (...p)=>{
                 callbacks.push(p);
                 counter = (counter + 1) % 2;
@@ -109,6 +106,7 @@ const delayFunc = (()=>{
             };
         }
     }
+    //上面两种都会在当前执行栈末尾回调。下面两个会在下个事件循环才执行，属于Plan B。
     if (typeof setImmediate === 'function') {
         return setImmediate;
     }
@@ -125,12 +123,12 @@ const delayToNextTick = promise=>{
         executeCallback,
         promise,
         promise[PromiseValue], 
-        promise[PromiseStatus] === 'fulfilled'
+        promise[PromiseState] === 'fulfilled'
     );
 };
 
 /**
- * 高级函数，让传入的resolve和reject函数同时只能被执行一次。
+ * 高阶函数，让传入的resolve和reject函数同时只能被执行一次。
  * 
  * @param {Function} resolve - 需要只执行一次的函数
  * @param {Function} reject - 需要只执行一次的函数
@@ -169,11 +167,11 @@ const resolutionProcedure = (promise, x)=>{
         return reject.call(promise, new TypeError());
     }
     if (x instanceof Promise) {
-        if (x[PromiseStatus] === 'pending') {
+        if (x[PromiseState] === 'pending') {
             x.then(...executeOnce(resolve, reject, promise));
         } else {
             promise[PromiseValue] = x[PromiseValue];
-            promise[PromiseStatus] = x[PromiseStatus];
+            promise[PromiseState] = x[PromiseState];
             delayToNextTick(promise);
         }
         return;
@@ -190,7 +188,7 @@ const resolutionProcedure = (promise, x)=>{
             try {
                 then.call(x, resolvePromise, rejectPromise);
             } catch(e) {
-                // 保证抛异常后，执行了某个方法，异常无效。
+                // 保证抛异常之前执行了某个方法，异常就会无效。
                 if (!status.executed) {
                     reject.call(promise, e);
                 }
@@ -198,7 +196,7 @@ const resolutionProcedure = (promise, x)=>{
             return;
         }
     }
-    promise[PromiseStatus] = 'fulfilled';
+    promise[PromiseState] = 'fulfilled';
     promise[PromiseValue] = x;
     delayToNextTick(promise);
 };
@@ -211,7 +209,7 @@ const resolutionProcedure = (promise, x)=>{
  * @returns 
  */
 const resolve = function(result) {
-    if (this[PromiseStatus] !== 'pending') return;
+    if (this[PromiseState] !== 'pending') return;
     resolutionProcedure(this, result);
 };
 
@@ -223,9 +221,9 @@ const resolve = function(result) {
  * @returns 
  */
 const reject = function(error) {
-    if (this[PromiseStatus] !== 'pending') return;
+    if (this[PromiseState] !== 'pending') return;
 
-    this[PromiseStatus] = 'rejected';
+    this[PromiseState] = 'rejected';
     this[PromiseValue] = error;
 
     delayToNextTick(this);
@@ -246,7 +244,7 @@ class Promise
      */
     constructor(fn)
     {
-        this[PromiseStatus] = 'pending';//fulfilled, rejected
+        this[PromiseState] = 'pending';//fulfilled, rejected
         this[PromiseValue] = undefined;
 
         onFulfillMap.set(this, []);
@@ -258,7 +256,7 @@ class Promise
             try{
                 fn(resolvePromise, rejectPromise);
             } catch(e) {
-                // 保证抛异常后，执行了某个方法，异常无效。
+                // 保证抛异常之前执行了某个方法，异常就会无效。
                 if (!status.executed) {
                     reject.call(this, e);
                 }
@@ -279,7 +277,7 @@ class Promise
     {
         onFulfillMap.get(this).push(onFulfilled);
         onRejectMap.get(this).push(onRejected);
-        if (this[PromiseStatus] !== 'pending') delayToNextTick(this);
+        if (this[PromiseState] !== 'pending') delayToNextTick(this);
 
         const nextPromise = new Promise();
         nextPromiseMap.get(this).push(nextPromise);
@@ -332,9 +330,13 @@ Promise.reject = (error)=>{
     return new Promise((resolve, reject) => reject(error));
 };
 
-Promise.all = function() {
+Promise.all = function() {};
 
-};
+Promise.race = function() {};
+
+Promise.try = function() {};
+Promise.done = function() {};
+Promise.finally = function() {};
 
 Object.freeze(Promise);
 
