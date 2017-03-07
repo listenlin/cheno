@@ -1,6 +1,11 @@
 Cheno是一个用ES6实现的Promise库
 ============================
 
+<a href="https://promisesaplus.com/">
+    <img src="https://promisesaplus.com/assets/logo-small.png" alt="Promises/A+ logo"
+         title="Promises/A+ 1.0 compliant" align="right" />
+</a>
+
 因为使用ES6开发，Cheno的Promise实现没有太多实用价值，ES6本身就有Promise。
 除非编译为ES5，但是又会依赖babel-polyfill，代码体积会变大很多。
 
