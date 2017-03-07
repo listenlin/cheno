@@ -1,7 +1,7 @@
-import aplus from "promises-aplus-tests";
+import aplus from 'promises-aplus-tests';
 import {describe} from 'mocha';
 
-import Promise from '../Promise/promise';
+import Promise from '../../src/promise';// 欲测试es6的promise，注释此句即可。
 
 const adapter = {
     deferred() {

@@ -1,15 +1,16 @@
+/* globals setTimeout:false, clearTimeout:false */
 import 'babel-polyfill';
 
 import {expect} from 'chai';
 import {describe, it} from 'mocha';
 
-import Promise from '../Promise/promise';
+import Promise from '../../src/promise';
 
 describe('测试Promise.then方法', ()=>{
 
     it('监听fulfilled状态转移', done=>{
 
-        (new Promise((resolve, reject)=>{
+        (new Promise((resolve)=>{
             setTimeout(()=>resolve('success'), 100);
         })).then((err)=>{
             expect(err).to.be.equal('success');
@@ -31,10 +32,10 @@ describe('测试Promise.then方法', ()=>{
 
     it('使用resolve传递回一个promise', done=>{
 
-        const p1 = new Promise((resolve, reject)=>{
+        const p1 = new Promise((resolve)=>{
             setTimeout(()=>resolve('p1'), 100);
         });
-        const p2 = new Promise((resolve, reject)=>{
+        const p2 = new Promise((resolve)=>{
             resolve(p1);
         });
         p2.then(result=>{
@@ -84,7 +85,7 @@ describe('测试Promise.then方法', ()=>{
     it('thenable的then方法调用时抛出异常', done=>{
         Promise.resolve().then(()=>{
             return {
-                then: function (resolvePromise) {
+                then: function () {
                     throw new Error;
                 }
             };
@@ -101,7 +102,7 @@ describe('测试Promise.then方法', ()=>{
                     resolvePromise(Promise.resolve(123));
                     resolvePromise(456);
                 }
-            }
+            };
         }).then((e)=>{
             expect(e).to.be.equal(123);
             done();
@@ -114,7 +115,7 @@ describe('测试Promise.then方法', ()=>{
                 then: function (resolvePromise) {
                     setTimeout(()=>resolvePromise(456), 0);
                 }
-            }
+            };
         }).then((e)=>{
             expect(e).to.be.equal(456);
             done();
@@ -134,14 +135,14 @@ describe('测试Promise.then方法', ()=>{
                     });
                     resolvePromise(Promise.resolve(456));
                 }
-            }
+            };
         }).then((e)=>{
             expect(e).to.be.equal(123);
             done();
         });
     });
 
-it('异步回调thenable的resolvePromise被调用两次,第一次调用抛出异常，第二次调用也应无效。', done=>{
+    it('异步回调thenable的resolvePromise被调用两次,第一次调用抛出异常，第二次调用也应无效。', done=>{
         Promise.resolve().then(()=>{
             return {
                 then(resolvePromise) {
@@ -154,7 +155,7 @@ it('异步回调thenable的resolvePromise被调用两次,第一次调用抛出�
                     });
                     throw new Error;
                 }
-            }
+            };
         }).then((e)=>{
             expect(e).to.be.equal(123);
             done();
@@ -203,7 +204,7 @@ it('异步回调thenable的resolvePromise被调用两次,第一次调用抛出�
         let i = 1;
         return (...p)=>{
             return count === i ? fn(...p) : i++;
-        }
+        };
     };
 
     it('同一个fulfilled状态的promise建立多个分支各自独立传递自己的状态', d=>{    
@@ -236,7 +237,7 @@ it('异步回调thenable的resolvePromise被调用两次,第一次调用抛出�
         const done = delayCountCall(d, 3);
         const promise = Promise.reject(new Error('failed'));
 
-        promise.then(null, (r)=>{
+        promise.then(null, ()=>{
             return 503;
         }).then((r)=>{
             expect(r).to.be.equal(503);
@@ -281,7 +282,7 @@ describe('异常处理', ()=>{
                 expect(err).to.a('error');
                 done();
             }, 100);
-        }).catch((err)=>{
+        }).catch(()=>{
             clearTimeout(timer);
             expect(1, '只是触发失败，错误信息无用。').to.equal(0);
             done();
@@ -312,21 +313,22 @@ describe('异常处理', ()=>{
     it('resolve传入参数和onFulfilled返回值是一个thenable', done=>{
         Promise.resolve().then(()=>{
             return {
-                then:(resolve, reject)=>{
+                then:(resolve)=>{
                     resolve({
                         then:(r)=>r(1234)
                     });
-            }};
+                }
+            };
         }).then((e)=>{
             expect(e).to.equal(1234);
             done();
         });
-    })
+    });
 
     it('onFulfilled返回一个thenable, resolve传入fulfilled的promise', done=>{
         Promise.resolve().then(()=>{
             return {
-                then(resolve, reject){
+                then(resolve){
                     resolve(Promise.resolve('sdf'));
                 }
             };
@@ -334,10 +336,10 @@ describe('异常处理', ()=>{
             expect(e).to.equal('sdf');
             done();
         });
-    })
+    });
 
     it('promise已是fulfill状态，reject无效', done=>{
-        const p = new Promise((resolve, reject)=>{
+        const p = new Promise((resolve)=>{
             resolve(123);
             throw new Error();
         });

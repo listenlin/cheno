@@ -1,9 +1,9 @@
+/* globals process:false, setTimeout:false, setImmediate:false, window:false, document:false */
 /**
  * 按照ES6的Promise或符合Promise/A+规范的对象，实现一致的功能。
  * @copyright Copyright(c) 2017 listenlin.
  * @author listenlin <listenlin521@foxmail.com>
  */
-import 'babel-polyfill';
 
 const PromiseValue = Symbol('PromiseValue');
 const PromiseStatus = Symbol('PromiseStatus');
@@ -28,7 +28,7 @@ const isThenable = (result)=>{
         }
     }
     return false;
-}
+};
 
 /**
  * 执行promise状态的监听器
@@ -70,7 +70,7 @@ const executeCallback = (promise, result, status)=>{
         // 没有注册rejected状态回调函数，直接抛出异常错误。
         // throw result;
     }
-}
+};
 
 /**
  * 获取一个可兼容浏览器和node环境的延迟至栈尾执行的函数。
@@ -82,6 +82,31 @@ const executeCallback = (promise, result, status)=>{
 const delayFunc = (()=>{
     if (typeof process !== 'undefined' && process.nextTick) {
         return process.nextTick;
+    }
+    if (typeof window === 'undefined') {
+        // Firefox和Chrome早期版本中带有前缀
+        const MutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
+        if(typeof MutationObserver !== 'undefined') {
+            let counter = 1;
+            let callbacks = [];
+            const observer = new MutationObserver(()=>{
+                callbacks = callbacks.filter(([fn, ...params])=>{
+                    if (typeof fn === 'function') {
+                        fn.apply(undefined, params);
+                    }
+                    return false;
+                });
+            });
+            const textNode = document.createTextNode(counter);
+            observer.observe(textNode, {
+                characterData : true
+            });
+            return (...p)=>{
+                callbacks.push(p);
+                counter = (counter + 1) % 2;
+                textNode.data = counter;
+            };
+        }
     }
     if (typeof setImmediate === 'function') {
         return setImmediate;
@@ -101,7 +126,7 @@ const delayToNextTick = promise=>{
         promise[PromiseValue], 
         promise[PromiseStatus] === 'fulfilled'
     );
-}
+};
 
 /**
  * 高级函数，让传入的resolve和reject函数同时只能被执行一次。
@@ -175,7 +200,7 @@ const resolutionProcedure = (promise, x)=>{
     promise[PromiseStatus] = 'fulfilled';
     promise[PromiseValue] = x;
     delayToNextTick(promise);
-}
+};
 
 /**
  * 将状态转移至fulfilled。
@@ -187,7 +212,7 @@ const resolutionProcedure = (promise, x)=>{
 const resolve = function(result) {
     if (this[PromiseStatus] !== 'pending') return;
     resolutionProcedure(this, result);
-}
+};
 
 /**
  * 将状态转移至rejected。
@@ -203,7 +228,7 @@ const reject = function(error) {
     this[PromiseValue] = error;
 
     delayToNextTick(this);
-}
+};
 
 /**
  * 按照ES6规范实现。
@@ -308,7 +333,7 @@ Promise.reject = (error)=>{
 
 Promise.all = function() {
 
-}
+};
 
 Object.freeze(Promise);
 
