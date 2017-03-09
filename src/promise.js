@@ -330,7 +330,29 @@ Promise.reject = (error)=>{
     return new Promise((resolve, reject) => reject(error));
 };
 
-Promise.all = function() {};
+Promise.all = function(promises) {
+    const results = [];
+    let length = 0, callCount = 0;
+    const newPromise = new Promise();
+    const onFulfill = (i)=>{
+        return r=>{
+            results[i] = r;
+            callCount++;
+            if (callCount === length) {
+                resolve.call(newPromise, results);
+            }
+        };
+    };
+    const onReject = (e)=>{
+        reject.call(newPromise, e);
+    };
+    for (let [i, promise] of promises.entries()) {
+        promise = Promise.resolve(promise);
+        promise.then(onFulfill(i), onReject);
+        length++;
+    }
+    return newPromise;
+};
 
 Promise.race = function() {};
 

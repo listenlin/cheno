@@ -367,3 +367,28 @@ describe('异常处理', ()=>{
     });
 
 });
+
+describe('测试Promise.all', () => {
+    it('都是fulfilled状态', done => {
+        const p = [];
+        for (let i of new Array(5)) {
+            p.push(Promise.resolve(4));
+        }
+        Promise.all(p).then(r => {
+            expect(r).to.be.an('array');
+            done();
+        });
+    });
+
+    it('有一个rejected状态', done => {
+        const p = [];
+        for (let i of new Array(5)) {
+            p.push(Promise.resolve(4));
+        }
+        p[2] = Promise.reject(new Error);
+        Promise.all(p).catch(r => {
+            expect(r).to.be.an('error');
+            done();
+        });
+    });
+});
