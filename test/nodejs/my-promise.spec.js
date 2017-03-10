@@ -392,3 +392,31 @@ describe('测试Promise.all', () => {
         });
     });
 });
+
+describe('测试Promise.race', () => {
+    it('全部触发fulfiled', done => {
+        const p = [];
+        for (let i = 0; i < 6; i++) {
+            const j = i;
+            p.push(new Promise(r=>setTimeout(()=>r(j), Math.random() * 1000)));
+        }
+        Promise.race(p).then(r => {
+            expect(r).to.be.an('number');
+            done();
+        });
+    });
+
+    it('随机触发一个rejected', done => {
+        const p = [];
+        for (let i = 0; i < 6; i++) {
+            const j = i;
+            p.push(new Promise(r=>setTimeout(()=>r(j), Math.random() * 1000)));
+        }
+        p[parseInt(Math.random() * 6)] = Promise.reject(new Error);
+        Promise.race(p).catch(r => {
+            expect(r).to.be.an('error');
+            done();
+        });
+    });
+    
+});

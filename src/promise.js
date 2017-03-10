@@ -354,7 +354,22 @@ Promise.all = function(promises) {
     return newPromise;
 };
 
-Promise.race = function() {};
+Promise.race = function (promises) {
+    const newPromise = new Promise();
+    const onFulfill = (r) => {
+        if (newPromise[PromiseState] !== 'pending') return;
+        resolve.call(newPromise, r);
+    };
+    const onReject = (e)=>{
+        if (newPromise[PromiseState] !== 'pending') return;
+        reject.call(newPromise, e);
+    };
+    for (let promise of promises) {
+        promise = Promise.resolve(promise);
+        promise.then(onFulfill, onReject);
+    }
+    return newPromise;
+};
 
 Promise.try = function() {};
 Promise.done = function() {};
