@@ -45,11 +45,11 @@ const executeCallback = (promise, result, status)=>{
     // 提前将已执行过的回调函数都丢弃掉，重置为空队列。以免回调中注册的被丢弃掉。
     onCallbackMap.set(promise, []);
     nextPromiseMap.set(promise, []);
-    const executedCallbacks = callbacks.filter((callback, index)=>{
+
+    callbacks.forEach((callback, index)=>{
         let callbackResult = result;
         let isFulfill = status;
-        const isFunction = typeof callback === 'function';
-        if (isFunction) {
+        if (typeof callback === 'function') {
             try{
                 callbackResult = callback.call(undefined, result); 
                 isFulfill = true; // 只要没有异常，后续都去执行resolve.
@@ -63,13 +63,7 @@ const executeCallback = (promise, result, status)=>{
         if (nextPromise instanceof Promise) {
             (isFulfill ? resolve : reject).call(nextPromise, callbackResult);
         }
-        return isFunction;
     });
-
-    if (!status && executedCallbacks.length === 0) {
-        // 没有注册rejected状态回调函数，直接抛出异常错误。
-        // throw result;
-    }
 };
 
 /**
@@ -330,6 +324,13 @@ Promise.reject = (error)=>{
     return new Promise((resolve, reject) => reject(error));
 };
 
+/**
+ * 只有所有的prmise对象都fulfilled后，才换转换状态。
+ * 又或者某个promise rejected后，使用期状态。
+ * 
+ * @param {any} promises 
+ * @returns 
+ */
 Promise.all = function(promises) {
     const results = [];
     let length = 0, callCount = 0;
@@ -354,6 +355,12 @@ Promise.all = function(promises) {
     return newPromise;
 };
 
+/**
+ * 竞速。即意味着哪个promise先转换了状态，则使用其状态和值。
+ * 
+ * @param {Array} promises - Promise对象构成的数组
+ * @returns 
+ */
 Promise.race = function (promises) {
     const newPromise = new Promise();
     const onFulfill = (r) => {
@@ -370,10 +377,6 @@ Promise.race = function (promises) {
     }
     return newPromise;
 };
-
-Promise.try = function() {};
-Promise.done = function() {};
-Promise.finally = function() {};
 
 Object.freeze(Promise);
 
