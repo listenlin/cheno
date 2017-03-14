@@ -15,22 +15,6 @@ const onRejectMap = new Map(); // 储存某个promise的rejected状态监听函�
 const nextPromiseMap = new Map();
 
 /**
- * 判断一个值是否是thenable对象。
- * 
- * @param {any} result - 需判断的值
- * @returns {Function|Boolean} 如果是一个thenable，返回then函数，否则返回false。
- */
-const isThenable = (result)=>{
-    if (typeof result === 'object' || typeof result === 'function') {
-        const then = result.then; // 注意：如果then是个属性，只允许调用一次。
-        if (typeof then === 'function') {
-            return then.bind(result);
-        }
-    }
-    return false;
-};
-
-/**
  * 执行promise状态的监听器
  * 
  * @param {Promise} promise - 需要执行回调的promise对象。
@@ -38,7 +22,7 @@ const isThenable = (result)=>{
  * @param {Boolean} status - 执行reject为true, resolve为false.
  * @returns
  */
-const executeCallback = (promise, result, status)=>{
+const executeCallback = (promise, result, status) => {
     const onCallbackMap = status ? onFulfillMap : onRejectMap;
     const callbacks = onCallbackMap.get(promise);
     const nextPromises = nextPromiseMap.get(promise);
@@ -46,12 +30,12 @@ const executeCallback = (promise, result, status)=>{
     onCallbackMap.set(promise, []);
     nextPromiseMap.set(promise, []);
 
-    callbacks.forEach((callback, index)=>{
+    callbacks.forEach((callback, index) => {
         let callbackResult = result;
         let isFulfill = status;
         if (typeof callback === 'function') {
-            try{
-                callbackResult = callback.call(undefined, result); 
+            try {
+                callbackResult = callback.call(undefined, result);
                 isFulfill = true; // 只要没有异常，后续都去执行resolve.
             } catch (e) {
                 callbackResult = e;
@@ -73,7 +57,7 @@ const executeCallback = (promise, result, status)=>{
  * @param {Function} fn - 需要延迟的函数
  * @param {...any} [args] - 需要依次传入延迟函数的参数 
  */
-const delayFunc = (()=>{
+const delayFunc = (() => {
     if (typeof process !== 'undefined' && process.nextTick) {
         return process.nextTick;
     }
@@ -81,19 +65,20 @@ const delayFunc = (()=>{
         // Firefox和Chrome早期版本中带有前缀
         const MutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
         // 使用MutationObserver来实现nextTick。
-        if(typeof MutationObserver !== 'undefined') {
-            let counter = 1, callbacks = [];
-            const observer = new MutationObserver(()=>{
+        if (typeof MutationObserver !== 'undefined') {
+            let counter = 1,
+                callbacks = [];
+            const observer = new MutationObserver(() => {
                 const copys = callbacks.splice(0);
-                copys.forEach(([fn, ...params])=>{
+                copys.forEach(([fn, ...params]) => {
                     if (typeof fn === 'function') {
                         fn.apply(undefined, params);
                     }
                 });
             });
             const textNode = document.createTextNode(counter);
-            observer.observe(textNode, {characterData: true});
-            return (...p)=>{
+            observer.observe(textNode, { characterData: true });
+            return (...p) => {
                 callbacks.push(p);
                 counter = (counter + 1) % 2;
                 textNode.data = counter;
@@ -104,7 +89,7 @@ const delayFunc = (()=>{
     if (typeof setImmediate === 'function') {
         return setImmediate;
     }
-    return (fn, ...p)=>setTimeout(fn, 0, ...p);
+    return (fn, ...p) => setTimeout(fn, 0, ...p);
 })();
 
 /**
@@ -112,11 +97,11 @@ const delayFunc = (()=>{
  * 
  * @param {Promise} promise - 需要去更改状态的primise对象
  */
-const delayToNextTick = promise=>{
+const delayToNextTick = promise => {
     delayFunc(
         executeCallback,
         promise,
-        promise[PromiseValue], 
+        promise[PromiseValue],
         promise[PromiseState] === 'fulfilled'
     );
 };
@@ -129,16 +114,16 @@ const delayToNextTick = promise=>{
  * @param {any} [context=undefined] - 执行函数时，其this变量指向谁。
  * @returns {Array} 返回数组，索引0和1是封装的函数，索引2是一个执行状态对象，可获取是否被执行的信息。
  */
-const executeOnce = (resolve, reject, context = undefined)=>{
-    let status = {executed : false};
+const executeOnce = (resolve, reject, context = undefined) => {
+    let status = { executed: false };
     return [
-        (...p)=>{
+        (...p) => {
             if (!status.executed) {
                 status.executed = true;
                 return resolve.call(context, ...p);
             }
         },
-        (...p)=>{
+        (...p) => {
             if (!status.executed) {
                 status.executed = true;
                 return reject.call(context, ...p);
@@ -156,7 +141,7 @@ const executeOnce = (resolve, reject, context = undefined)=>{
  * @param {Promise} promise - 需要解析的promise对象
  * @param {any} x - 用户传来的值，通过resolve或resolvePromise参数、onFulfilled返回值传入。
  */
-const resolutionProcedure = (promise, x)=>{
+const resolutionProcedure = (promise, x) => {
     if (promise instanceof Promise && promise === x) {
         return reject.call(promise, new TypeError());
     }
@@ -172,16 +157,16 @@ const resolutionProcedure = (promise, x)=>{
     }
     if (x && (typeof x === 'object' || typeof x === 'function')) {
         let then;
-        try{
+        try {
             then = x.then;
-        } catch(e) {
+        } catch (e) {
             return reject.call(promise, e);
         }
         if (typeof then === 'function') {
             const [resolvePromise, rejectPromise, status] = executeOnce(resolve, reject, promise);
             try {
                 then.call(x, resolvePromise, rejectPromise);
-            } catch(e) {
+            } catch (e) {
                 // 保证抛异常之前执行了某个方法，异常就会无效。
                 if (!status.executed) {
                     reject.call(promise, e);
@@ -228,28 +213,26 @@ const reject = function(error) {
  * 
  * @class Promise
  */
-class Promise
-{
+class Promise {
     /**
      * Creates an instance of Promise.
      * @param {Function} fn
      * 
      * @memberOf Promise
      */
-    constructor(fn)
-    {
-        this[PromiseState] = 'pending';//fulfilled, rejected
+    constructor(fn) {
+        this[PromiseState] = 'pending'; //fulfilled, rejected
         this[PromiseValue] = undefined;
 
         onFulfillMap.set(this, []);
         onRejectMap.set(this, []);
         nextPromiseMap.set(this, []);
-        
+
         if (typeof fn === 'function') {
             const [resolvePromise, rejectPromise, status] = executeOnce(resolve, reject, this);
-            try{
+            try {
                 fn(resolvePromise, rejectPromise);
-            } catch(e) {
+            } catch (e) {
                 // 保证抛异常之前执行了某个方法，异常就会无效。
                 if (!status.executed) {
                     reject.call(this, e);
@@ -267,8 +250,7 @@ class Promise
      * 
      * @memberOf Promise
      */
-    then(onFulfilled, onRejected)
-    {
+    then(onFulfilled, onRejected) {
         onFulfillMap.get(this).push(onFulfilled);
         onRejectMap.get(this).push(onRejected);
         if (this[PromiseState] !== 'pending') delayToNextTick(this);
@@ -287,8 +269,7 @@ class Promise
      * 
      * @memberOf Promise
      */
-    catch(onRejected)
-    {
+    catch (onRejected) {
         return this.then(null, onRejected);
     }
 
@@ -298,45 +279,41 @@ class Promise
 
 }
 
-Promise.resolve = (result)=>{
+Promise.resolve = (result) => {
     if (result instanceof Promise) {
         return result;
     }
-    let promise;
-    try{
-        const then = isThenable(result);
-        if (then) {
-            promise = new Promise(then);
-        } else {
-            promise = new Promise(resolve => resolve(result));
+    try {
+        if (typeof result === 'object' || typeof result === 'function') {
+            const then = result.then; // 注意：如果then是个属性，只允许调用一次。
+            if (typeof then === 'function') {
+                return new Promise(then.bind(result));
+            }
         }
-    } catch(e) {
-        if (promise) {
-            reject.call(promise, e);
-        } else {
-            promise = Promise.reject(e);
-        }
+    } catch (e) {
+        return Promise.reject(e);
     }
-    return promise;
+    return new Promise(resolve => resolve(result));
 };
 
-Promise.reject = (error)=>{
+Promise.reject = (error) => {
     return new Promise((resolve, reject) => reject(error));
 };
 
 /**
  * 只有所有的prmise对象都fulfilled后，才换转换状态。
- * 又或者某个promise rejected后，使用期状态。
+ * 又或者某个promise rejected后，使用其状态。
  * 
  * @param {any} promises 
  * @returns 
  */
 Promise.all = function(promises) {
     const results = [];
-    let length = 0, callCount = 0;
+    let length = 0,
+        callCount = 0;
     const newPromise = new Promise();
-    const onFulfill = (i)=>{
-        return r=>{
+    const onFulfill = (i) => {
+        return r => {
             results[i] = r;
             callCount++;
             if (callCount === length) {
@@ -344,7 +321,7 @@ Promise.all = function(promises) {
             }
         };
     };
-    const onReject = (e)=>{
+    const onReject = (e) => {
         reject.call(newPromise, e);
     };
     for (let [i, promise] of promises.entries()) {
@@ -361,13 +338,13 @@ Promise.all = function(promises) {
  * @param {Array} promises - Promise对象构成的数组
  * @returns 
  */
-Promise.race = function (promises) {
+Promise.race = function(promises) {
     const newPromise = new Promise();
     const onFulfill = (r) => {
         if (newPromise[PromiseState] !== 'pending') return;
         resolve.call(newPromise, r);
     };
-    const onReject = (e)=>{
+    const onReject = (e) => {
         if (newPromise[PromiseState] !== 'pending') return;
         reject.call(newPromise, e);
     };
