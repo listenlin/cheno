@@ -58,9 +58,6 @@ const executeCallback = (promise, result, status) => {
  * @param {...any} [args] - 需要依次传入延迟函数的参数 
  */
 const delayFunc = (() => {
-    if (typeof process !== 'undefined' && process.nextTick) {
-        return process.nextTick;
-    }
     if (typeof window !== 'undefined') {
         // Firefox和Chrome早期版本中带有前缀
         const MutationObserver = window.MutationObserver || window.WebKitMutationObserver || window.MozMutationObserver;
@@ -84,6 +81,10 @@ const delayFunc = (() => {
                 textNode.data = counter;
             };
         }
+    }
+    // 放第二个判断，避免browserify自动导入process.nextTick来覆盖浏览器实现。
+    if (typeof process !== 'undefined' && process.nextTick) {
+        return process.nextTick;
     }
     //上面两种都会在当前执行栈末尾回调。下面两个会在下个事件循环才执行，属于Plan B。
     if (typeof setImmediate === 'function') {
